@@ -1,6 +1,8 @@
 # QueueItem
 
 ## Table of Contents
+- [QueueItem](#queueitem.queueitem)
+- [run](#queueitem.run)
 
 
 ### QueueItem
@@ -22,4 +24,8 @@ A class to represent a task item in the queue
 
 
 <a id="queueitem.run"></a>
-
+```python
+async def run()
+```
+Run the task asynchronously, non-async coroutines are run with `asyncio.to_thread`.
+Tasks are run with a timeout if specified.
