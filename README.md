@@ -82,4 +82,9 @@ Contributions are welcome!
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-```
+
+---
+
+## Documentation
+
+See the [documentation](./docs) for more details.
