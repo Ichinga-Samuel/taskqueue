@@ -1,7 +1,7 @@
 name: Push To Remote
 on:
   push:
-    branches: [dev]
+    branches: [dev, master]
 
 jobs:
   build:
