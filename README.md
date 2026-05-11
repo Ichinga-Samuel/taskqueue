@@ -1,189 +1,443 @@
-# Asynchronous Task Queue Manager
+<p align="center">
+  <img src="docs/assets/osiiso-banner.png" alt="osiiso structured task queue banner" width="100%">
+</p>
 
-![PyPI](https://img.shields.io/pypi/v/async-queue-manager)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+# osiiso
 
-An efficient and robust asynchronous task queue for Python, built on top of `asyncio`. It's designed for handling concurrent tasks with support for prioritization, dynamic worker scaling, and graceful shutdowns.
+Structured task queues for Python across `asyncio`, threads, and processes.
 
-## Key Features
+<p>
+  <a href="https://github.com/Ichinga-Samuel/osiiso/actions/workflows/action.yml"><img alt="CI" src="https://github.com/Ichinga-Samuel/osiiso/actions/workflows/action.yml/badge.svg"></a>
+  <a href="https://github.com/Ichinga-Samuel/osiiso/actions/workflows/docs.yml"><img alt="Docs" src="https://github.com/Ichinga-Samuel/osiiso/actions/workflows/docs.yml/badge.svg"></a>
+  <img alt="Python 3.13+" src="https://img.shields.io/badge/python-3.13%2B-3776AB?logo=python&logoColor=white">
+  <img alt="Typed package" src="https://img.shields.io/badge/typed-py.typed-blue">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+</p>
 
--   **Asynchronous First:** Built from the ground up using Python's modern `asyncio` library for high-performance I/O-bound tasks.
--   **Priority Queues:** Supports task prioritization out of the box. Lower priority numbers are processed first.
--   **Dynamic Worker Management:** Automatically scales worker tasks based on queue size to efficiently process jobs.
--   **Sync & Async Task Support:** Seamlessly handles both `async` coroutines and regular synchronous functions.
--e   **Timeout Control:** Set a global timeout for the queue to prevent it from running indefinitely.
--   **Graceful Shutdown:** Configure how the queue handles pending tasks on exit—either cancel them immediately or complete high-priority ones before stopping.
--   **Multiple Modes:** Run in `finite` mode for a set batch of tasks or `infinite` mode for long-running services that continuously process tasks.
+`osiiso` gives you one compact queue API for three execution backends:
+
+- `AsyncQueue` for coroutine-heavy I/O and async integrations.
+- `ThreadQueue` for blocking I/O, synchronous SDKs, filesystem work, and SQLite writes.
+- `ProcessQueue` for CPU-heavy work that benefits from separate subprocesses.
+
+It is dependency-free at runtime, typed with `py.typed`, and built around a predictable workflow: submit tasks, apply options, run the queue, then inspect handles and a `RunSummary`.
+
+## Contents
+
+- [Why osiiso](#why-osiiso)
+- [Installation](#installation)
+- [Choose a queue](#choose-a-queue)
+- [Quick start](#quick-start)
+- [Core concepts](#core-concepts)
+- [Task options](#task-options)
+- [Results and errors](#results-and-errors)
+- [Examples](#examples)
+- [Documentation](#documentation)
+- [Development](#development)
+- [Community](#community)
+
+## Why osiiso
+
+- Shared API across async, thread, and process execution.
+- Priority scheduling where lower priority numbers run first.
+- Retries with optional delay and exponential backoff.
+- Per-task timeouts and queue-level run timeouts.
+- Graceful shutdown with `must_complete` task protection.
+- Batch workflows with `submit()`, `map()`, and `group()`.
+- Awaitable async handles and blocking sync handles.
+- Structured `RunSummary` and immutable `TaskResult` records.
+- Lifecycle hooks for `on_start`, `on_complete`, and `on_retry`.
+- Optional `uvloop` integration through `osiiso.run()`.
 
 ## Installation
 
-You can install the package from PyPI:
+```bash
+pip install osiiso
+```
+
+With optional `uvloop` support:
 
 ```bash
-pip install async-queue-manager
+pip install "osiiso[uvloop]"
 ```
 
-## Basic Usage
+The project targets Python 3.13 and newer.
 
-Here's how to get started with the `TaskQueue` in just a few lines of code.
+## Choose a queue
+
+| Workload | Queue | Good for |
+| --- | --- | --- |
+| Coroutine-based I/O | `AsyncQueue` | HTTP clients, async databases, websockets, API fan-out |
+| Blocking synchronous work | `ThreadQueue` | File operations, blocking SDKs, SQLite writes, sync integrations |
+| CPU-heavy functions | `ProcessQueue` | Ranking, parsing, scoring, transformations, analytics |
+
+The queues intentionally look similar, so work can move between execution models with minimal changes.
+
+## Quick start
 
 ```python
 import asyncio
-import time
+import osiiso
 
-# 1. Import the TaskQueue
-from async_queue_manager import TaskQueue
 
-# 2. Define some tasks (can be async or regular functions)
-async def async_task(duration, name):
-    """An example asynchronous task."""
-    print(f"Starting async task: {name}")
-    await asyncio.sleep(duration)
-    print(f"✅ Finished async task: {name}")
-
-def sync_task(duration, name):
-    """An example synchronous task."""
-    print(f"Starting sync task: {name}")
-    time.sleep(duration)
-    print(f"✅ Finished sync task: {name}")
-
-async def main():
-    # 3. Create a TaskQueue instance
-    task_queue = TaskQueue()
-
-    # 4. Add tasks to the queue
-    print("Adding tasks to the queue...")
-    task_queue.add_task(async_task, 1, "A (Low Prio)")
-    task_queue.add_task(sync_task, 2, "B (Sync)")
-    task_queue.add_task(async_task, 0.5, "C (High Prio)")
-
-    # 5. Run the queue and wait for all tasks to complete
-    print("🚀 Starting the queue...")
-    start_time = time.monotonic()
-    await task_queue.run()
-    end_time = time.monotonic()
-    
-    print(f"🎉 All tasks completed in {end_time - start_time:.2f} seconds!")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-## Advanced Usage
-
-### Task Prioritization
-
-You can assign a `priority` to each task. Tasks with a lower number have a higher priority and will be executed first.
-
-```python
-import asyncio
-from async_queue_manager import TaskQueue
-
-async def my_task(name):
-    print(f"Executing task: {name}")
+async def fetch(name: str) -> str:
     await asyncio.sleep(0.1)
+    return f"fetched {name}"
+
 
 async def main():
-    queue = TaskQueue()
+    async with osiiso.AsyncQueue(workers=4) as q:
+        q.submit(fetch, "users", priority=0)
+        q.submit(fetch, "posts", retries=2, retry_delay=0.25, timeout=5)
 
-    # Add tasks with different priorities
-    queue.add_task(my_task, "Task A (Priority 5)", priority=5)
-    queue.add_task(my_task, "Task B (Priority 10)", priority=10)
-    queue.add_task(my_task, "Task C (Priority 1)", priority=1) # Highest priority
+        summary = await q.run(strict=True)
+        return summary.values
 
-    # The queue will execute tasks in this order: C, A, B
-    await queue.run()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+print(osiiso.run(main()))
 ```
 
-### Timeout and Shutdown Policy
+## Core concepts
 
-You can control how the queue behaves when it times out using `queue_timeout` and `on_exit`. You can also mark critical tasks with `must_complete=True` to ensure they finish even if the queue times out.
+### `submit()`
 
--   `on_exit='complete_priority'` (default): When the timeout is reached, the queue stops accepting new tasks but will wait for any tasks marked `must_complete=True` to finish. Other tasks are cancelled.
--   `on_exit='cancel'`: When the timeout is reached, the queue immediately cancels all running and pending tasks.
+Use `submit()` for one task. It returns a handle immediately.
+
+```python
+handle = q.submit(fetch_user, "ada", retries=3, timeout=10, name="fetch-user")
+```
+
+Async handles are awaitable:
+
+```python
+result = await handle
+value = handle.value()
+```
+
+Thread and process handles are blocking:
+
+```python
+result = handle.wait(timeout=5)
+value = handle.value()
+```
+
+### `map()`
+
+Use `map()` for one callable over many inputs.
+
+```python
+q.map(download, urls, retries=2, group_id="downloads")
+q.map(add, [(1, 2), (3, 4), (5, 6)], name="add")
+q.map(request, [{"method": "GET", "url": "https://example.com"}])
+```
+
+Tuple entries are unpacked as positional arguments. Mapping entries are passed as keyword arguments.
+
+### `group()`
+
+Use `group()` for a named batch, especially when tasks have different callables.
+
+```python
+group = q.group(
+    [
+        (extract, "db"),
+        (transform, raw_records),
+        (load, destination),
+    ],
+    group_id="etl-batch-1",
+)
+
+summary = q.run()
+values = group.values()
+```
+
+For `AsyncQueue`, use `await group.wait()` and `await group.values()`.
+
+### Bound tasks
+
+Bind a callable to a queue with `@q.task()`.
+
+```python
+async with osiiso.AsyncQueue(workers=4) as q:
+    @q.task(retries=2, retry_delay=0.25, name="fetch")
+    async def fetch(url: str) -> str:
+        return await client.get(url)
+
+    fetch("https://example.com")
+    fetch.map(["https://example.org", "https://example.net"])
+
+    summary = await q.run(strict=True)
+```
+
+## Queue examples
+
+### AsyncQueue
 
 ```python
 import asyncio
-from async_queue_manager import TaskQueue
+import osiiso
 
-async def long_running_task(duration, name):
-    print(f"Starting task: {name} (will run for {duration}s)")
-    await asyncio.sleep(duration)
-    print(f"✅ Finished task: {name}")
+
+async def fetch(name: str) -> str:
+    await asyncio.sleep(0.1)
+    return f"fetched {name}"
+
 
 async def main():
-    # Initialize with the 'complete_priority' shutdown policy
-    queue = TaskQueue(on_exit='complete_priority')
+    async with osiiso.AsyncQueue(workers=4) as q:
+        q.map(fetch, ["users", "posts", "comments"], retries=2, timeout=5)
+        summary = await q.run(strict=True)
+        print(summary.values)
 
-    # This task will likely be cancelled by the timeout
-    queue.add_task(long_running_task, 4, "Normal Task")
 
-    # This task will be allowed to finish because must_complete is True
-    queue.add_task(long_running_task, 4, "Critical Task", must_complete=True)
-
-    print("Running queue with a 2-second timeout...")
-    await queue.run(queue_timeout=2)
-    print("Queue has finished or timed out.")
-    # Expected output will show "Critical Task" finishing after the timeout is announced.
-
-if __name__ == "__main__":
-    asyncio.run(main())
+osiiso.run(main())
 ```
 
-## API Reference
+### ThreadQueue
 
-### `TaskQueue(...)`
-
-The main class for managing the queue.
-
-| Parameter       | Type                                | Description                                                                     | Default               |
-|-----------------|-------------------------------------|---------------------------------------------------------------------------------|-----------------------|
-| `size`          | `int`                               | The maximum size of the queue. `0` means infinite.                              | `0`                   |
-| `queue_timeout` | `int`                               | Default timeout in seconds for the queue when `run()` is called.                | `0` (no timeout)      |
-| `on_exit`       | `'cancel'` or `'complete_priority'` | The policy for handling tasks on shutdown or timeout.                           | `'complete_priority'` |
-| `mode`          | `'finite'` or `'infinite'`          | `'finite'` stops when empty; `'infinite'` keeps the queue running indefinitely. | `'finite'`            |
-
-### `TaskQueue.add_task(...)`
-
-Adds a new task to the queue.
-
-| Parameter           | Type                   | Description                                                                                | Default |
-|---------------------|------------------------|--------------------------------------------------------------------------------------------|---------|
-| `task`              | `Callable` `Coroutine` | The async or sync function to execute.                                                     |         |
-| `*args`, `**kwargs` | `Any`                  | Arguments to pass to the task function.                                                    |         |
-| `must_complete`     | `bool`                 | If `True`, task is completed even if queue times out (with `on_exit='complete_priority'`). | `False` |
-| `priority`          | `int`                  | The priority of the task. A lower number means higher priority.                            | `3`     |
-
-### `await TaskQueue.run(...)`
-
-Starts the queue workers and waits for tasks to complete.
-
-| Parameter       | Type  | Description                                          | Default |
-|-----------------|-------|------------------------------------------------------|---------|
-| `queue_timeout` | `int` | Overrides the default timeout for this specific run. | `None`  |
+```python
+import time
+import osiiso
 
 
-## Contributing
+def resize(path: str) -> str:
+    time.sleep(0.1)
+    return f"resized {path}"
 
-Contributions are welcome! If you'd like to contribute, please follow these steps:
 
-1.  Fork the repository.
-2.  Clone your fork and set up the development environment:
-    ```bash
-    git clone [https://github.com/YOUR_USERNAME/taskqueue.git](https://github.com/YOUR_USERNAME/taskqueue.git)
-    cd taskqueue
-    pip install -e .[dev]
-    ```
-3.  Make your changes and add tests for them.
-4.  Run the tests to ensure everything is working:
-    ```bash
-    pytest
-    ```
-5.  Submit a pull request with a clear description of your changes.
+with osiiso.ThreadQueue(workers=4) as q:
+    q.map(resize, ["a.png", "b.png", "c.png"], name="resize")
+    summary = q.run(strict=True)
+
+print(summary.values)
+```
+
+### ProcessQueue
+
+Keep process tasks importable and pickleable. Top-level functions and plain data arguments are the safest choice.
+
+```python
+import osiiso
+
+
+def score(n: int) -> int:
+    return sum(i * i for i in range(n))
+
+
+if __name__ == "__main__":
+    with osiiso.ProcessQueue(workers=4) as q:
+        q.map(score, [10_000, 20_000, 30_000], name="score")
+        summary = q.run(strict=True)
+
+    print(summary.values)
+```
+
+## Task options
+
+Task behavior can be configured inline or through an immutable `TaskOptions` object.
+
+```python
+from osiiso import TaskOptions
+
+
+retrying = TaskOptions(retries=3, retry_delay=0.5, backoff=2, timeout=10)
+urgent = retrying.replace(priority=0, name="urgent-api-call")
+
+q.submit(fetch, url, opts=urgent)
+q.submit(fetch, other_url, retries=3, retry_delay=0.5, backoff=2)
+```
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `priority` | `3` | Lower numbers run first. |
+| `must_complete` | `False` | Protects a task during graceful shutdown. |
+| `timeout` | `None` | Per-task timeout in seconds. |
+| `retries` | `0` | Retry attempts after the first failure. |
+| `retry_delay` | `0.0` | Delay before the first retry. |
+| `backoff` | `1.0` | Multiplier applied after each retry. |
+| `delay` | `None` | Run after this many seconds. |
+| `run_at` | `None` | Run at an absolute epoch timestamp. |
+| `name` | `None` | Custom result and hook name. |
+| `group_id` | `None` | Group label for summaries. |
+| `detached` | `False` | Metadata flag for fire-and-forget style tasks. |
+
+`TaskOptions` validates invalid combinations immediately. For example, `delay` and `run_at` are mutually exclusive, negative retries are rejected, and unknown submit options raise `TypeError`.
+
+## Results and errors
+
+Every `run()` returns a `RunSummary`.
+
+```python
+summary.ok
+summary.succeeded
+summary.failed
+summary.cancelled
+summary.timed_out
+summary.values
+summary.errors
+summary.by_task_id()
+summary.by_name()
+summary.by_group()
+summary.raise_for_errors()
+summary.display()
+```
+
+Use `strict=True` when failures should raise `ExecutionError` after the run finishes:
+
+```python
+summary = await q.run(strict=True)
+```
+
+Each task result is stored as a `TaskResult` with task id, name, status, value, exception, attempts, priority, timing, group id, and cancellation metadata.
+
+## Lifecycle and policies
+
+Queues support finite and long-running modes:
+
+```python
+q = osiiso.AsyncQueue(mode="finite", fail_policy="continue", on_exit="complete_priority")
+```
+
+- `mode="finite"` runs pending work and exits.
+- `mode="infinite"` keeps workers alive until shutdown or timeout.
+- `fail_policy="continue"` records failures and keeps processing.
+- `fail_policy="fail_first"` cancels remaining eligible work after the first failure.
+- `on_exit="complete_priority"` lets `must_complete` tasks finish during graceful shutdown.
+- `on_exit="cancel"` cancels eligible pending and active work on timeout or forced shutdown.
+
+Hooks give you a simple integration point for logging, metrics, and tracing:
+
+```python
+def completed(result: osiiso.TaskResult) -> None:
+    print(result.name, result.status, result.duration)
+
+
+q = osiiso.ThreadQueue(on_complete=completed)
+```
+
+## Examples
+
+Run the compact feature gallery:
+
+```bash
+uv run python examples/feature_gallery.py
+```
+
+Run the complete Hacker News style showcase:
+
+```bash
+uv run python -m examples.hackernews_showcase --limit 6
+```
+
+Use the live Hacker News API:
+
+```bash
+uv run python -m examples.hackernews_showcase --limit 20 --online
+```
+
+The showcase uses all three backends:
+
+- `AsyncQueue` fetches feeds, items, and users.
+- `ThreadQueue` persists records into SQLite.
+- `ProcessQueue` ranks stories and computes keywords.
+
+## Documentation
+
+The MkDocs documentation lives in [`docs/`](docs/index.md).
+
+Run the docs locally:
+
+```bash
+python -m pip install -e ".[docs]"
+mkdocs serve
+```
+
+Build the docs strictly:
+
+```bash
+mkdocs build --strict
+```
+
+Project docs are configured for GitHub Pages at:
+
+```text
+https://ichinga-samuel.github.io/osiiso/
+```
+
+## Development
+
+Install the development dependencies:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Run tests:
+
+```bash
+uv run pytest
+```
+
+Run Ruff:
+
+```bash
+uv run ruff check .
+```
+
+Build the package:
+
+```bash
+python -m build
+```
+
+Build the docs with the docs extra:
+
+```bash
+uv run --extra docs mkdocs build --strict
+```
+
+## Community
+
+- Read the [contribution guide](CONTRIBUTING.md) before opening larger pull requests.
+- Check the [changelog](CHANGELOG.md) for release history and upcoming changes.
+- Use [support guidance](SUPPORT.md) for questions, bug reports, and feature requests.
+- Report vulnerabilities through the [security policy](SECURITY.md), not public issues.
+- Follow the [code of conduct](CODE_OF_CONDUCT.md) when participating in project spaces.
+
+## Project layout
+
+```text
+.
+|-- src/osiiso/                  # Library source
+|-- tests/                       # Unit tests for async, thread, process, and options behavior
+|-- docs/                        # MkDocs documentation
+|-- examples/feature_gallery.py  # Compact API showcase
+|-- examples/hackernews_showcase # Complete multi-backend example project
+|-- pyproject.toml               # Package metadata and tool configuration
+`-- mkdocs.yml                   # Documentation site configuration
+```
+
+## Public API
+
+```python
+from osiiso import (
+    AsyncQueue,
+    ThreadQueue,
+    ProcessQueue,
+    TaskOptions,
+    TaskHandle,
+    SyncTaskHandle,
+    TaskGroup,
+    SyncTaskGroup,
+    TaskResult,
+    RunSummary,
+    ExecutionError,
+    ClosedError,
+    OsiisoError,
+    run,
+)
+```
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+`osiiso` is released under the [MIT License](LICENSE).

@@ -13,6 +13,7 @@ venv/
 build/
 develop-eggs/
 dist/
+site/
 downloads/
 eggs/
 .eggs/
@@ -48,6 +49,5 @@ htmlcov/
 .pytest_cache
 nosetests.xml
 coverage.xml
-pytest.ini
 *,cover
 .hypothesis/

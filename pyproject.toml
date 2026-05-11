@@ -1,29 +1,99 @@
-[project]
-name = "async-queue-manager"
-version = "0.1.1"
-requires-python = ">=3.13"
-readme = "README.md"
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
 
+[project]
+name = "osiiso"
+version = "0.0.1a1"
+description = "Structured concurrency and parallelism for asyncio, threading, and multiprocessing using queues."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Ichinga Samuel", email = "ichingasamuel@gmail.com"}]
+keywords = [
+    "asyncio",
+    "concurrency",
+    "multiprocessing",
+    "parallelism",
+    "priority-queue",
+    "queue",
+    "structured-concurrency",
+    "task-queue",
+    "threading",
+]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+uvloop = ["uvloop>=0.19"]
+docs = [
+    "mkdocs>=1.6.1",
+]
+dev = [
+    "build>=1.2.2",
+    "coverage[toml]>=7.10.5",
+    "mkdocs>=1.6.1",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "ruff>=0.12.10",
 ]
 
-keywords = ["queue", "asynchronous", "concurrency", "asyncio"]
-
-description = "Asynchronous Task Queue, For managing and executing tasks concurrently using asyncio."
-
-authors = [{name = "Ichinga Samuel", email = "ichingasamuel@gmail.com"}]
-
 [project.urls]
-"Homepage" = "https://github.com/Ichinga-Samuel/taskqueue"
-"Bug Tracker" = "https://github.com/Ichinga-Samuel/taskqueue/issues"
+Homepage = "https://github.com/Ichinga-Samuel/osiiso"
+Repository = "https://github.com/Ichinga-Samuel/osiiso"
+Issues = "https://github.com/Ichinga-Samuel/osiiso/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["osiiso*"]
+
+[tool.setuptools.package-data]
+osiiso = ["py.typed"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["osiiso"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 135
+target-version = "py313"
+extend-exclude = ["test project"]
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
 
 [dependency-groups]
 dev = [
-    "coverage>=7.10.5",
-    "pytest>=8.4.1",
-    "pytest-asyncio>=1.1.0",
     "ruff>=0.12.10",
 ]
