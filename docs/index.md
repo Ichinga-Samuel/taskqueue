@@ -1,4 +1,4 @@
-# osiiso
+# osiiso osiiso
 
 `osiiso` is a small Python package for structured task queues across three
 execution backends:
